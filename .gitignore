@@ -1,1 +1,6 @@
 *.pyc
+*.pcapng
+doc/
+.vscode/
+test.py
+soap_client.py
