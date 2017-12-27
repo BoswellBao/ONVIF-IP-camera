@@ -8,6 +8,7 @@
 from lxml import etree
 import re
 
+# onvif soap namespace defined in <ONVIF-Core-Specification> chap5.3
 ns_soap = {
     'tt': 'http://www.onvif.org/ver10/schema',
     'tds': 'http://www.onvif.org/ver10/device/wsdl',
@@ -32,20 +33,43 @@ ns_soap = {
     'xop': 'http://www.w3.org/2004/08/xop/include'
 }
 
+bool_map = {
+    True: 'true',
+    False: 'false'
+}
 
-def soap_encode(params, method):
+def soap_encode(params, method, path):
     '''
     构造并返回soap消息体
+        params: 要封装的参数，字典形式，如下：
+            'tds:capcabilities':{
+                'tt:device':{
+                    'tt:xaddr': 'device_services',
+                    'tt:network': 'IPV6',
+                    'tt:system': 'discovery'
+                },
+                'tt:events':{
+                    'tt:xaddr': 'Events',
+                    'tt:WSSubscriptionPolicySupport': True,
+                    'tt:WSPullPointSupport': False
+                },
+                'tt:Media':{
+                    'tt:XAddr': 'Media',
+                    'tt:RTPMulticast': True,
+                    'tt:RTP_RTSP_TCP':True
+                }
+            }}
+        method:
+            请求的方法名，如GetCapabilities
+        path:
+            请求路径
     '''
-    header = _wrap_soap_head()
-    body = r'''<tds:GetDeviceInformationResponse>
-        <tds:Manufacturer>GoSun Test</tds:Manufacturer>
-        <tds:Model>Mars01</tds:Model>
-        <tds:FirmwareVersion>1.00</tds:FirmwareVersion>
-        <tds:SerialNumber>00408C1836B2</tds:SerialNumber>
-        <tds:HardwareId>170</tds:HardwareId>
-        </tds:GetDeviceInformationResponse>'''
-    return _wrap_soap_message(header, body)
+    response_method = '{0}Response'.format(method)
+    if path == '/onvif/device_service':
+        ns = 'tds'
+    elif path == '/onvif/media':
+        ns = 'trt'
+    return _wrap_soap_message(ns, response_method, params)
 
 def soap_decode(data):
     '''
@@ -57,19 +81,22 @@ def soap_decode(data):
     if len(method)>0:
         params = _get_method_params(method)
     else:
-        params = None
+        params = {}
     return method_name, params
 
 def _get_method_params(parent_node):
     '''
     解析参数信息，将参数打包为一个列表返回。
+    return value:
+        [{'Category': 'All'}]
+        [{'IncludeCapability': 'true'}]
     '''
     params_list = []
     for param in parent_node:
         tmp_dict = {}
         param_name = _get_node_tag(param)
         if len(param) > 0:
-            sub_param = _get_method_params(param)
+            sub_param = _get_method_params(param)   # recursively phrase sub node
             sub_param_name = _get_node_tag(param)
             tmp_dict[sub_param_name] = sub_param
         else:
@@ -79,35 +106,62 @@ def _get_method_params(parent_node):
     return params_list
 
 def _get_node_tag(node):
+    '''
+    解析出xml节点tag，过滤掉其namespace
+    '''
     pattern = r'[^{}]+(?={|$)'
     return re.findall(pattern, node.tag)[0]
 
 
-def _wrap_soap_head():
-    response_soap_header = r'''<?xml version="1.0" encoding="UTF-8"?>
-    <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"'''
-    for ns in ns_soap:
-        ns_string = '''xmlns:{0}="{1}"'''.format(ns, ns_soap[ns])
-        response_soap_header += ns_string
-    return '{0}<SOAP-ENV:Body>'.format(response_soap_header)
-
-def _wrap_soap_message(header, body):
+def _wrap_soap_message(ns, response_method, params):
+    '''封装soap消息'''
+    header = _wrap_soap_head()
+    param = _wrap_params(params)
+    body = '''<{0}:{1}>{2}</{0}:{1}>'''.format(ns, response_method, param)
     return '''{0}{1}</SOAP-ENV:Body></SOAP-ENV:Envelope>'''.format(header, body)
 
 
-if __name__ == '__main__':
-    soap = b'''<?xml version="1.0" encoding="UTF-8"?>
-    <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"
-    xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
-    <SOAP-ENV:Body>
-    <tds:GetCapabilities>
-    <tds:Category>All</tds:Category>
-    </tds:GetCapabilities>
-    </SOAP-ENV:Body>
-    </SOAP-ENV:Envelope>'''
+def _wrap_soap_head():
+    '''封装soap namespace'''
+    response_soap_header = r'''<?xml version="1.0" encoding="UTF-8"?>
+    <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"'''
+    for ns in ns_soap:
+        ns_string = ''' xmlns:{0}="{1}"'''.format(ns, ns_soap[ns])
+        response_soap_header += ns_string
+    return '{0}><SOAP-ENV:Body>'.format(response_soap_header)
 
-    name, params = soap_decode(soap)
-    print(name)
-    print(params)
-    # header = _wrap_soap_head(['tt', 'tds'])
-    # print(header)
+
+def _wrap_params(params):
+    body = ''
+    for key in params:
+        if isinstance(params[key], dict):
+            sub_node = _wrap_params(params[key])
+            body = '''{0}<{1}>{2}</{1}>'''.format(body, key, sub_node)
+        else:
+            if isinstance(params[key], bool):
+                params[key] = bool_map[params[key]]
+            body = '''{0}<{1}>{2}</{1}>'''.format(body, key, params[key])
+    return body
+
+
+if __name__ == '__main__':
+    test_dict = {
+        'capcabilities':{
+            'device':{
+                'xaddr': 'device_services',
+                'network': 'IPV6',
+                'system': 'discovery'
+            },
+            'events':{
+                'xaddr': 'Events',
+                'WSSubscriptionPolicySupport': True,
+                'WSPullPointSupport': False
+            },
+            'Media':{
+                'XAddr': 'Media',
+                'RTPMulticast': True,
+                'RTP_RTSP_TCP':True
+            }
+        }}
+    body = _wrap_params(test_dict)
+    print(body)

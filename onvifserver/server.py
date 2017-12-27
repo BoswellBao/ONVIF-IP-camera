@@ -14,6 +14,31 @@ import inspect
 from onvifserver.utils import soap_decode, soap_encode
 
 
+class Error(Exception):
+    """Base class for server errors."""
+    def __str__(self):
+        return repr(self)
+
+
+class OnvifServerError(Error):
+    def __init__(self, faultString, **extra):
+        self.faultString = faultString
+
+    def __repr__(self):
+        return "<%s: %r>" % (self.__class__.__name__, self.faultString)
+
+
+class Fault(Error):
+    """onvif server fault."""
+    def __init__(self, faultCode, faultString, **extra):
+        Error.__init__(self)
+        self.faultCode = faultCode
+        self.faultString = faultString
+    def __repr__(self):
+        return "<%s %s: %r>" % (self.__class__.__name__,
+                                self.faultCode, self.faultString)
+
+
 class OnvifServerDispatcher(object):
     '''
     onvif服务端任务分发处理模块，根据不同请求url路径将消息分发至对应的模块中
@@ -25,22 +50,26 @@ class OnvifServerDispatcher(object):
         self.encoding = encoding or 'utf-8'
         self.use_builtin_types = use_builtin_types
 
-    def register_instance(self, instance_dict, allow_dotted_names=False):
+    def register_instance(self, instance, path):
         """
         注册一个对象来响应对应的onvif请求
         参数：
-            instance_dict：{service_path: instance}
+            instance: 用户实现的onvifserver类.
+                      类中如果包含_dispatch函数client请求的方法和参数会传递到_dispatch中，
+                      如_dispatch(“GetDeviceInformation”, None), 否则，使用内置_dispatch
+
+                      类处理请求函数命名要求如下，如获取设备信息方法为“GetDeviceInformation”，
+                      那么函数命名应为get_device_information, 'GetServiceCapabilities'应命名
+                      为get_service_capabilities
+            path: server path, 如'/onvif/device_service'
         """
-        self.instances.update(instance_dict)
-        self.allow_dotted_names = allow_dotted_names
+        self.instances[path] = instance
 
     def register_function(self, function, name=None):
-        """Registers a function to respond to XML-RPC requests.
-
+        """Registers a function to respond to onvif server.
         The optional name argument can be used to set a Unicode name
         for the function.
         """
-
         if name is None:
             name = function.__name__
         self.funcs[name] = function
@@ -57,19 +86,11 @@ class OnvifServerDispatcher(object):
             else:
                 response = self._dispatch(method, params, path)
             # wrap response in a singleton tuple
-            # response = (response,)
             response = soap_encode(response, method, path)
-        # except Fault as fault:
-        #     response = dumps(fault, allow_none=self.allow_none,
-        #                      encoding=self.encoding)
-        except:
-            # report exception back to server
-            exc_type, exc_value, exc_tb = sys.exc_info()
-            # response = soap_encode(
-            #     Fault(1, "%s:%s" % (exc_type, exc_value)),
-            #     encoding=self.encoding, allow_none=self.allow_none,
-            #     )
-        # return response
+        except Fault as fault:
+            pass
+            print('an error happened in dispatch')  # just for debug
+            # response = soap_error(fault, allow_none=self.allow_none,encoding=self.encoding)
         return response.encode(self.encoding, 'xmlcharrefreplace')
 
     def _dispatch(self, method, params, path):
@@ -84,24 +105,27 @@ class OnvifServerDispatcher(object):
             try:
                 instance = self.instances[path]
             except KeyError:
-                pass
+                raise Exception('server "%s" is not supported' % path)
             else:
+                # whether a instance has a _dispatch
                 if hasattr(instance, '_dispatch'):
                     return instance._dispatch(method, params)
                 else:
-                    # todo
-                    pass
+                    pattern = r'[A-Z][a-z]+'
+                    match = re.findall(pattern, method)
+                    func = eval('instance.' + '_'.join(match).lower())
+
         if func is not None:
-            return func(params)
+            return func(*params)
         else:
             raise Exception('method "%s" is not supported' % method)
 
 
 class OnvifServerRequestHandler(BaseHTTPRequestHandler):
-    """Simple XML-RPC request handler class.
+    """onvif server request handler class.
 
     Handles all HTTP POST requests and attempts to decode them as
-    XML-RPC requests.
+    onvif-client requests.
     """
 
     # Class attribute listing the accessible path components;
@@ -194,6 +218,7 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("X-traceback", trace)
 
             self.send_header("Content-length", "0")
+            print(e)
             self.end_headers()
         else:
             self.send_response(200)
