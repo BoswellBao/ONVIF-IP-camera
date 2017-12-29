@@ -161,7 +161,7 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
         if self.service_paths:
             return self.path in self.service_paths
         else:
-            # If .rpc_paths is empty, just assume all paths are legal
+            # If rpc_paths is empty, just assume all paths are legal
             return True
 
     def do_POST(self):
@@ -224,15 +224,6 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Connection", "close")
             self.send_header("Content-type", "application/soap+xml; charset=utf-8")
-            # if self.encode_threshold is not None:
-            #     if len(response) > self.encode_threshold:
-            #         q = self.accept_encodings().get("gzip", 0)
-            #         if q:
-            #             try:
-            #                 response = gzip_encode(response)
-            #                 self.send_header("Content-Encoding", "gzip")
-            #             except NotImplementedError:
-            #                 pass
             self.send_header("Content-length", str(len(response)))
             self.end_headers()
             self.wfile.write(response)
@@ -246,12 +237,7 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
         if content_type == "unknown":
             self.send_response(501, "unknown content-type")
         if  "application/soap+xml" in content_type:
-            try:
-                return data
-            except NotImplementedError:
-                self.send_response(501, "content_type %r not supported" % content_type)
-            except ValueError:
-                self.send_response(400, "error decoding soap content")
+            return data
         else:
             self.send_response(501, "content-type %r not supported" % content_type)
         self.send_header("Content-length", "0")

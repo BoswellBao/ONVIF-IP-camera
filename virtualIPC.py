@@ -6,7 +6,8 @@
 # you may not use this file except in compliance with the License.
 #
 import random
-from onvifserver.server import OnvifServer, Fault
+from onvifserver.server import OnvifServer, Fault, OnvifServerError
+from ipc_params import *
 
 
 class DeviceManagement(object):
@@ -25,10 +26,11 @@ class DeviceManagement(object):
         self.service_addr = {
             'device': '{}/device_service'.format(root_path),
             'media': '{}/Media'.format(root_path),
-            'event': '{}/Event'.format(root_path),
+            'event': '{}/Events'.format(root_path),
             'analytics': '{}/Analytics'.format(root_path),
             'imaging': '{}/Imaging'.format(root_path)
         }
+
 
     def get_device_information(self, *args, **kwgs):
         '''
@@ -36,65 +38,27 @@ class DeviceManagement(object):
         '''
         seeds = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
         serial_number = ''.join(random.sample(seeds, 12))
-        device_info = {'tds:Manufacturer': 'GOSUN',
-                        'tds:Firmware_Version': 'V5.4.0 build 160613',
-                        'tds:Model': 'GS-TEST-DaShen01',
-                        'tds:SerialNumber': serial_number}
+        device_info = wrap_param_with_ns('tds', device_information)
+        device_info['tds:SerialNumber'] = serial_number
         return device_info
+
 
     def get_capabilities(self, *args, **kwgs):
         '''GetCapabilities'''
-        device_cap = {
-            'tt:XAddr':self.service_addr['device'],
-            'tt:Network': {
-                'tt:IPFilter': True,
-                'tt:IPVersion6': False,
-                'tt:ZeroConfiguration': False,
-                'tt:DynDNS':True,
-            },
-            'tt:System': {
-                'tt:DiscoveryResolve': False,
-                'tt:DiscoveryBye': True,
-                'tt:RemoteDiscovery': False,
-                'tt:SystemBackup': False,
-                'tt:FirmwareUpgrade': False,
-                'tt:SystemLogging': False,
-            },
-            'tt:Security': {
-                'tt:AccessPolicyConfig': False,
-                'tt:DefaultAccessPolicy': False,
-                'tt:X.509Token': False,
-                'tt:SAMLToken': False,
-                'tt:KerberosToken': False,
-                'tt:RELToken': False,
-                'tt:SupportedEAPMethod': False,
-                'tt:RemoteUserHandling': False
-            },
-            'tt:IO': {
-                'tt:InputConnectors':2,
-                'tt:RelayOutputs': 0
-            }
-        }
+        if 'Category' not in args[0]:
+            raise OnvifServerError('Category Not found')
 
-        media_cap = {
-            'tt:XAddr':self.service_addr['media'],
-            'tt:StreamingCapabilities': {
-                'tt:RTPMulticast': False,
-                'tt:RTP_TCP': True,
-                'tt:RTP_RTSP_TCP': True
-            }
-        }
+        device_cap = wrap_param_with_ns('tt', device_capabilties)
+        device_cap['tt:XAddr'] = self.service_addr['device']
 
-        event_cap = {
-            'tt:XAddr':self.service_addr['event'],
-            'tt:WSSubscriptionPolicySupport': True,
-            'tt:WSPullPointSupport': True,
-            'tt:WSPausableSubscriptionManagerInterfaceSupport': False
-        }
+        media_cap = wrap_param_with_ns('tt', media_capabilities)
+        media_cap['tt:XAddr'] = self.service_addr['media']
 
-        imaging_cap = {
-            'tt:XAddr':self.service_addr['imaging']
-        }
+        event_cap = wrap_param_with_ns('tt', event_capabilities)
+        event_cap['tt:XAddr'] = self.service_addr['event']
+
+        imaging_cap = wrap_param_with_ns('tt', imaging_capabilities)
+        imaging_cap['tt:XAddr'] = self.service_addr['imaging']
 
         if args[0]['Category'].lower() == 'all':
             capabilities = {
@@ -108,19 +72,43 @@ class DeviceManagement(object):
             pass    # Todo: error process
         return capabilities
 
+
     def get_system_date_and_time(self, *args, **kwgs):
         '''GetSystemDateAndTime'''
-        return None
+        return {}
+
 
     def get_services(self, *args, **kwgs):
+        ''' GetServices '''
+        if 'IncludeCapability' not in args[0]:
+            raise OnvifServerError('IncludeCapability not found')
+        else:
+            if args[0]['IncludeCapability'].lower() == 'true':
+                include_cap = True
+            else:
+                include_cap = False
+        service_list = []
+
+        for server in self.service_addr:
+            service = {}
+            service['tds:Namespace'] = namespace_map[server]
+            service['tds:XAddr'] = self.service_addr[server]
+            service['tds:Capabilities'] = self._wrap_capability(eval(server+'_capabilities'))
+            service['tds:Version'] = wrap_param_with_ns('tt', service_version)
+            service_list.append({'tds:Service': service})
+        return service_list
+
+    def _wrap_capability(self, capabilities):
         return None
+
 
     def get_service_capabilities(self, *args, **kwgs):
         print(args, kwgs)
-        return None
+        return {}
 
 
 class Media(object):
+    ''' Media profile '''
     pass
 
 
@@ -135,7 +123,6 @@ class OnvifIPC(object):
         with OnvifServer((ip, port)) as self.server:
             self.server.register_instance(DeviceManagement(ip, port), "/onvif/device_service")
             self.server.serve_forever()
-
 
 
 if __name__ == '__main__':

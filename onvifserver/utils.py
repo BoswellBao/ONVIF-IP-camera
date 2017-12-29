@@ -41,7 +41,8 @@ bool_map = {
 def soap_encode(params, method, path):
     '''
     构造并返回soap消息体
-        params: 要封装的参数，字典形式，如下：
+        params: 要封装的参数，字典形式，如下, 
+        字典的值可以是一个列表，但是最小单元必须是一个字典：
             'tds:capcabilities':{
                 'tt:device':{
                     'tt:xaddr': 'device_services',
@@ -57,8 +58,15 @@ def soap_encode(params, method, path):
                     'tt:XAddr': 'Media',
                     'tt:RTPMulticast': True,
                     'tt:RTP_RTSP_TCP':True
-                }
+                },
+                'respon':[
+                    {'server': '123'},
+                    {'server': '345'},
+                    {'server': '789'}
+                ]
+                'tt:imaging': None
             }}
+
         method:
             请求的方法名，如GetCapabilities
         path:
@@ -132,15 +140,24 @@ def _wrap_soap_head():
 
 
 def _wrap_params(params):
+    ''' 封装参数 '''
     body = ''
     for key in params:
         if isinstance(params[key], dict):
             sub_node = _wrap_params(params[key])
             body = '''{0}<{1}>{2}</{1}>'''.format(body, key, sub_node)
+        elif isinstance(params[key], list):
+            list_node = ''
+            for item in params[key]:
+                list_node += _wrap_params(item)
+            body = '''{0}<{1}>{2}</{1}>'''.format(body, key, list_node)
         else:
             if isinstance(params[key], bool):
                 params[key] = bool_map[params[key]]
-            body = '''{0}<{1}>{2}</{1}>'''.format(body, key, params[key])
+            if params[key] is None:
+                body = '''{0}<{1}/>'''.format(body, key)
+            else:
+                body = '''{0}<{1}>{2}</{1}>'''.format(body, key, params[key])
     return body
 
 
@@ -161,7 +178,12 @@ if __name__ == '__main__':
                 'XAddr': 'Media',
                 'RTPMulticast': True,
                 'RTP_RTSP_TCP':True
-            }
+            },
+            'respon':[
+                {'server': '123'},
+                {'server': '345'},
+                {'server': '789'}
+            ]
         }}
     body = _wrap_params(test_dict)
     print(body)
