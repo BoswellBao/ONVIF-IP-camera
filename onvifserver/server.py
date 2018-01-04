@@ -46,6 +46,7 @@ class OnvifServerDispatcher(object):
     def __init__(self, allow_none=False, encoding=None, use_builtin_types=False):
         self.funcs = {}
         self.instances = {}
+        self.server_path = []
         self.allow_none = allow_none
         self.encoding = encoding or 'utf-8'
         self.use_builtin_types = use_builtin_types
@@ -64,7 +65,8 @@ class OnvifServerDispatcher(object):
             path: server path, 如'/onvif/device_service'
         """
         self.instances[path] = instance
-
+        self.server_path.append(path)
+        
     def register_function(self, function, name=None):
         """Registers a function to respond to onvif server.
         The optional name argument can be used to set a Unicode name
@@ -78,6 +80,9 @@ class OnvifServerDispatcher(object):
         """
         Todo
         """
+        if path not in self.server_path:
+            raise OnvifServerError('Unsupported server')
+
         try:
             method, params = soap_decode(data)
             # generate response
@@ -126,11 +131,9 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
 
     Handles all HTTP POST requests and attempts to decode them as
     onvif-client requests.
-    """
-
+    """        
     # Class attribute listing the accessible path components;
     # paths not on this list will result in a 404 error.
-    service_paths = ('/onvif/device_service', '/onvif/media')
 
     #if not None, encode responses larger than this, if possible
     encode_threshold = 1400 #a common MTU
@@ -140,29 +143,6 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
     wbufsize = -1
     disable_nagle_algorithm = True
 
-    # a re to match a gzip Accept-Encoding
-    aepattern = re.compile(r"""
-                            \s* ([^\s;]+) \s*            #content-coding
-                            (;\s* q \s*=\s* ([0-9\.]+))? #q
-                            """, re.VERBOSE | re.IGNORECASE)
-
-    def accept_encodings(self):
-        r = {}
-        ae = self.headers.get("Accept-Encoding", "")
-        for e in ae.split(","):
-            match = self.aepattern.match(e)
-            if match:
-                v = match.group(3)
-                v = float(v) if v else 1.0
-                r[match.group(1)] = v
-        return r
-
-    def is_rpc_path_valid(self):
-        if self.service_paths:
-            return self.path in self.service_paths
-        else:
-            # If rpc_paths is empty, just assume all paths are legal
-            return True
 
     def do_POST(self):
         """Handles the HTTP POST request.
@@ -170,12 +150,9 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
         Attempts to interpret all HTTP POST requests as XML-RPC calls,
         which are forwarded to the server's _dispatch method for handling.
         """
-
-        # Check that the path is legal
-        if not self.is_rpc_path_valid():
+        if 'onvif' not in self.path:
             self.report_404()
             return
-
         try:
             # Get arguments by reading body of request.
             # We read this in chunks to avoid straining

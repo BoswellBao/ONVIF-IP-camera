@@ -9,6 +9,7 @@ import random
 import sqlite3
 import datetime
 from onvifserver.server import OnvifServer, Fault, OnvifServerError
+from onvifserver import utils
 from ipc_params import *
 
 
@@ -21,18 +22,12 @@ class DeviceManagement(object):
         self.port = port
         self.ptz = ptz
         if self.port == 80:
-            root_path = "{}/onvif".format(self.ip)
+            root_path = "http://{}".format(self.ip)
         else:
-            root_path = "{0}:{1}/onvif".format(self.ip, self.port)
-        
-        self.service_addr = {
-            'device': 'http://{}/device_service'.format(root_path),
-            'media': 'http://{}/Media'.format(root_path),
-            'event': 'http://{}/Events'.format(root_path),
-            'imaging': 'http://{}/Imaging'.format(root_path),
-            'analytics': 'http://{}/Analytics'.format(root_path),
-            'deviceio': 'http://{}/DeviceIo'.format(root_path)
-        }
+            root_path = "http://{0}:{1}".format(self.ip, self.port)
+        self.service_addr = {}
+        for server in utils.service_addr:
+            self.service_addr[server] = '{0}{1}'.format(root_path, utils.service_addr[server])
 
     def get_device_information(self, *args, **kwgs):
         '''
@@ -61,7 +56,7 @@ class DeviceManagement(object):
         imaging_cap = wrap_param_with_ns('tt', imaging_capabilities)
         imaging_cap['tt:XAddr'] = self.service_addr['imaging']
 
-        deviceio_cap = wrap_param_with_ns('tt', deviceio_capcabilities)
+        deviceio_cap = wrap_param_with_ns('tt', deviceio_capabilities)
         deviceio_cap['tt:XAddr'] = self.service_addr['deviceio']
 
         if args[0]['Category'].lower() == 'all':
@@ -112,7 +107,6 @@ class DeviceManagement(object):
 
     def get_services(self, *args, **kwgs):
         ''' GetServices '''
-        print('****************')
         if 'IncludeCapability' not in args[0]:
             raise OnvifServerError('IncludeCapability not found')
         else:
@@ -120,37 +114,36 @@ class DeviceManagement(object):
                 include_cap = True
             else:
                 include_cap = False
-        service_list = []
 
+        service_list = []
         for server in self.service_addr:
             service = {}
-            service['tds:Namespace'] = namespace_map[server][1]
+            service['tds:Namespace'] = utils.namespace_map[server][1]
             service['tds:XAddr'] = self.service_addr[server]
-            service['tds:Capabilities'] = self._wrap_capability(namespace_map[server][0], eval(server+'_capabilities'))
-            service['tds:Version'] = wrap_param_with_ns('tt', service_version)
+            service['tds:Capabilities'] = self._wrap_capability(utils.namespace_map[server][0], eval(server+'_capabilities'))
+            service['tds:Version'] = wrap_param_with_ns('tt', utils.service_version)
             service_list.append({'tds:Service': service})
         return {'NO_WRAP': service_list}
 
     def _wrap_capability(self, ns, capabilities, cap_name='Capabilities'):
+        '''将能力集封装为xml节点属性'''
         cap_with_attr = '{0}:{1}'.format(ns, cap_name)
         capability = {}
         has_sub_dict = False
+        attri_dict = {}
         for cap in capabilities:
             if not isinstance(capabilities[cap], dict):
-                if isinstance(capabilities[cap], bool):
-                    cap_with_attr = '{0} {1}="{2}"'.format(cap_with_attr, cap, str(capabilities[cap]).lower())
+                attri_dict[cap] = capabilities[cap]
             else:
                 has_sub_dict = True
+        capability['ATTRI'] = attri_dict
 
+        # 对子集循环迭代
         if has_sub_dict:
-            sub_cap = {}
             for cap in capabilities:
                 if isinstance(capabilities[cap], dict):
-                    sub_cap.update(self._wrap_capability(ns, capabilities[cap], cap))
-            return{cap_with_attr: sub_cap}
-        else:
-            return {cap_with_attr: None}
-
+                    capability.update(self._wrap_capability(ns, capabilities[cap], cap))
+        return {cap_with_attr: capability}
 
     def get_service_capabilities(self, *args, **kwgs):
         print(args, kwgs)
@@ -161,6 +154,18 @@ class Media(object):
     ''' Media profile '''
     def get_profiles(self):
         ''' GetProfiles '''
+        profile1 = wrap_param_with_ns('tt', media_profile1)
+        profile2 = wrap_param_with_ns('tt', media_profile2)
+        profile_list = [
+            {'trt:Profiles': profile1},
+            {'trt:Profiles':profile2},
+            ]
+        return {'NO_WRAP': profile_list}
+
+
+class Events(object):
+    ''' 告警与事件订阅 '''
+    def subscribe(self, *args, **kwgs):
         pass
 
 
@@ -173,8 +178,9 @@ class OnvifIPC(object):
         a tuple of IP and port, eg: ("192.168.1.9", 8080)
         '''
         with OnvifServer((ip, port)) as self.server:
-            self.server.register_instance(DeviceManagement(ip, port), "/onvif/device_service")
-            self.server.register_instance(Media(), "onvif/Media")
+            self.server.register_instance(DeviceManagement(ip, port), utils.service_addr['device'])
+            self.server.register_instance(Media(), utils.service_addr['media'])
+            self.server.register_instance(Events(), utils.service_addr['event'])
             self.server.serve_forever()
 
 if __name__ == '__main__':

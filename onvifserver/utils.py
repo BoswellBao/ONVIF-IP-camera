@@ -17,6 +17,9 @@ ns_soap = {
     'ter': 'http://www.onvif.org/ver10/error',
     'dn': 'http://www.onvif.org/ver10/network/wsdl',
     'tns1': 'http://www.onvif.org/ver10/topics',
+    'tan': 'http://www.onvif.org/ver20/analytics/wsdl',
+    'timg': 'http://www.onvif.org/ver20/imaging/wsdl',
+    'tmd': 'http://www.onvif.org/ver10/deviceIO/wsdl',
     # standard namespace
     'wsdl': 'http://schemas.xmlsoap.org/wsdl/',
     'wsoap12': 'http://schemas.xmlsoap.org/wsdl/soap12/',
@@ -33,6 +36,34 @@ ns_soap = {
     'xop': 'http://www.w3.org/2004/08/xop/include'
 }
 
+############## service path ####################
+service_addr = {
+    'device': '/onvif/device_service',
+    'media': '/onvif/Media',
+    'event': '/onvif/Events',
+    'analytics': '/onvif/Analytics',
+    'imaging': '/onvif/Imaging',
+    'deviceio': '/onvif/DeviceIo'
+}
+
+service_version = {
+    'Major': 2,
+    'Minor': 20
+}
+
+SupportedVersions = [(2, 60), (2, 40), (2, 20), (2, 10), (2, 0)]
+
+
+namespace_map = {
+    'device': ('tds', 'http://www.onvif.org/ver10/device/wsdl'),
+    'media': ('trt', 'http://www.onvif.org/ver10/media/wsdl'),
+    'event': ('tev', 'http://www.onvif.org/ver10/events/wsdl'),
+    'analytics': ('tan', 'http://www.onvif.org/ver20/analytics/wsdl'),
+    'imaging': ('timg', 'http://www.onvif.org/ver20/imaging/wsdl'),
+    'deviceio':('tmd', 'http://www.onvif.org/ver10/deviceIO/wsdl')
+}
+
+# bool-string map
 bool_map = {
     True: 'true',
     False: 'false'
@@ -45,7 +76,7 @@ def soap_encode(params, method, path):
         字典的值可以是一个列表，但是最小单元必须是一个字典,每一个key都封装为一个xml节点的tag
         如果封装的xml多个同级节点有相同tag，则以字典组成的列表方式封装
         如果不希望将字典的key作为一个xml节点，key设置为NO_WRAP,不影响key对应的子集
-        
+        key 值为ATTRI：将对应的值作为节点属性封装
         example1：
             'tds:capcabilities':{
                 'tt:device':{
@@ -80,7 +111,7 @@ def soap_encode(params, method, path):
     response_method = '{0}Response'.format(method)
     if path == '/onvif/device_service':
         ns = 'tds'
-    elif path == '/onvif/media':
+    elif path == '/onvif/Media':
         ns = 'trt'
     return _wrap_soap_message(ns, response_method, params)
 
@@ -153,11 +184,16 @@ def _wrap_params(params):
 
     for key in params:
         if isinstance(params[key], dict):
+            attributes = params[key].pop('ATTRI', None)
+            if attributes:
+                node = _wrap_attribute(key, attributes)
+            else:
+                node = key
             sub_node = _wrap_params(params[key])
             if key == 'NO_WRAP':
                 body = '''{0}{1}'''.format(body, sub_node)
             else:
-                body = '''{0}<{1}>{2}</{1}>'''.format(body, key, sub_node)
+                body = '''{0}<{1}>{2}</{3}>'''.format(body, node, sub_node, key)
         elif isinstance(params[key], list):
             list_node = ''
             for item in params[key]:
@@ -175,30 +211,11 @@ def _wrap_params(params):
                 body = '''{0}<{1}>{2}</{1}>'''.format(body, key, params[key])
     return body
 
+def _wrap_attribute(key, attributes):
+    node = key
+    for attr in attributes:
+        if isinstance(attributes[attr], bool):
+            attributes[attr] = bool_map[attributes[attr]]
+        node = '{0} {1}="{2}"'.format(node, attr, attributes[attr])
+    return node
 
-if __name__ == '__main__':
-    test_dict = {
-        'capcabilities':{
-            'device':{
-                'xaddr': 'device_services',
-                'network': 'IPV6',
-                'system': 'discovery'
-            },
-            'events':{
-                'xaddr': 'Events',
-                'WSSubscriptionPolicySupport': True,
-                'WSPullPointSupport': False
-            },
-            'Media':{
-                'XAddr': 'Media',
-                'RTPMulticast': True,
-                'RTP_RTSP_TCP':True
-            },
-            'respon':[
-                {'server': '123'},
-                {'server': '345'},
-                {'server': '789'}
-            ]
-        }}
-    body = _wrap_params(test_dict)
-    print(body)

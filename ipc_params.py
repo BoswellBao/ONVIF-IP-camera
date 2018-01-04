@@ -20,30 +20,6 @@ def wrap_param_with_ns(ns, params):
     return new
 
 
-##################### service map  #####################
-service_addr = {
-    'device': '/device_service',
-    'media': '/Media',
-    'event': '/Events',
-    'analytics': '/Analytics',
-    'imaging': '/Imaging',
-    'deviceio': '/DeviceIo'
-}
-
-service_version = {
-    'Major': 2,
-    'Minor': 20
-}
-
-namespace_map = {
-    'device': ('tds', 'http://www.onvif.org/ver10/device/wsdl'),
-    'media': ('trt', 'http://www.onvif.org/ver10/media/wsdl'),
-    'event': ('tev', 'http://www.onvif.org/ver10/events/wsdl'),
-    'analytics': ('tan', 'http://www.onvif.org/ver20/analytics/wsdl'),
-    'imaging': ('timg', 'http://www.onvif.org/ver20/imaging/wsdl')
-}
-
-
 ##################### Camera Capabilities  #####################
 device_capabilities = {
     'Network': {
@@ -52,34 +28,14 @@ device_capabilities = {
         'ZeroConfiguration': False,
         'DynDNS':True,
     },
-    'System': [
-        {'DiscoveryResolve': False},
-        {'DiscoveryBye': True},
-        {'RemoteDiscovery': False},
-        {'SystemBackup': False},
-        {'FirmwareUpgrade': True},
-        {'SystemLogging': False},
-        {'SupportedVersions':{
-            'Major': 2,
-            'Minor': 60,
-        }},
-        {'SupportedVersions':{
-            'Major': 2,
-            'Minor': 40,
-        }},
-        {'SupportedVersions':{
-            'Major': 2,
-            'Minor': 20,
-        }},
-        {'SupportedVersions':{
-            'Major': 2,
-            'Minor': 10,
-        }},
-        {'SupportedVersions':{
-            'Major': 2,
-            'Minor': 0,
-        }},
-    ],
+    'System': {
+        'DiscoveryResolve': False,
+        'DiscoveryBye': True,
+        'RemoteDiscovery': False,
+        'SystemBackup': False,
+        'FirmwareUpgrade': True,
+        'SystemLogging': False,
+    },
     'Security': {
         'TLS1.1': False,
         'TLS1.2': False,
@@ -105,10 +61,8 @@ media_capabilities = {
         'RTP_TCP': True,
         'RTP_RTSP_TCP': True
     },
-    'Extension':{
-        'ProfileCapabilities':{
-            'MaximumNumberOfProfiles': 3
-        }
+    'ProfileCapabilities':{
+        'MaximumNumberOfProfiles': 3
     }
 }
 
@@ -125,7 +79,7 @@ analytics_capabilities = {
     'AnalyticsModuleSupport': True
 }
 
-deviceio_capcabilities = {
+deviceio_capabilities = {
     'VideoSources': 1,
     'VideoOutputs': 0,
     'AudioSources': 0,
@@ -148,3 +102,119 @@ time_setting = {
 }
 
 ############# Media Profiles ##############
+
+media_profile1 = {
+    'ATTRI': {
+        'fixed': True,
+        'token': 'Profile1',
+    },
+    'Name': 'Profile1',
+    'VideoSourceConfiguration': {
+        'ATTRI': {
+            'xsi:type': 'tt:VideoSourceConfiguration',
+            'token': 'video_source_config'
+        },
+        'Name': 'video_source_config',
+        'UseCount': 2,
+        'SourceToken': 'video_source',
+        'Bounds':{
+            'ATTRI': {
+                'height': 1080,
+                'width': 1920,
+                'y': 1,
+                'x': 1
+            }
+        }
+    },
+    'VideoEncoderConfiguration':{
+        'ATTRI': {
+            'xsi:type': "tt:VideoEncoderConfiguration",
+            'token': "video_encoder_Main"
+        },
+        'Name': 'video_encoder_Main',
+        'UseCount': 2,
+        'Encoding': 'H264',
+        'Resolution': {
+            'Width': 1920,
+            'Height': 1080,
+        },
+        'Quality': 4,
+        'RateControl': {
+            'FrameRateLimit': 25,
+            'EncodingInterval': 1,
+            'BitrateLimit': 4096,
+        },
+        'H264': {
+            'GovLength': 50,
+            'H264Profile': 'High'
+        },
+        'Multicast': {
+            'Address': {
+                'Type': 'IPv4',
+                'IPv4Address': '0.0.0.0',
+            },
+            'Port': 0,
+            'TTL': 3,
+            'AutoStart': False,
+        },
+        'SessionTimeout': 'PT60S',
+    }
+}
+
+media_profile2 = {
+    'ATTRI': {
+        'fixed': True,
+        'token': 'Profile2',
+    },
+    'Name': 'Profile2',
+    'VideoSourceConfiguration': {
+        'ATTRI': {
+            'xsi:type': 'tt:VideoSourceConfiguration',
+            'token': 'video_source_config'
+        },
+        'Name': 'video_source_config',
+        'UseCount': 2,
+        'SourceToken': 'video_source',
+        'Bounds':{
+            'ATTRI': {
+                'height': 1080,
+                'width': 1920,
+                'y': 1,
+                'x': 1
+            }
+        }
+    },
+    'VideoEncoderConfiguration':{
+        'ATTRI': {
+            'xsi:type': "tt:VideoEncoderConfiguration",
+            'token': "video_encoder_substream"
+        },
+        'Name': 'video_encoder_substream',
+        'UseCount': 2,
+        'Encoding': 'H264',
+        'Resolution': {
+            'Width': 1080,
+            'Height': 720,
+        },
+        'Quality': 4,
+        'RateControl': {
+            'FrameRateLimit': 25,
+            'EncodingInterval': 1,
+            'BitrateLimit': 2018,
+        },
+        'H264': {
+            'GovLength': 50,
+            'H264Profile': 'High'
+        },
+        'Multicast': {
+            'Address': {
+                'Type': 'IPv4',
+                'IPv4Address': '0.0.0.0',
+            },
+            'Port': 0,
+            'TTL': 3,
+            'AutoStart': False,
+        },
+        'SessionTimeout': 'PT60S',
+    }
+}
