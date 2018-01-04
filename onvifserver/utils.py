@@ -42,7 +42,11 @@ def soap_encode(params, method, path):
     '''
     构造并返回soap消息体
         params: 要封装的参数，字典形式，如下, 
-        字典的值可以是一个列表，但是最小单元必须是一个字典：
+        字典的值可以是一个列表，但是最小单元必须是一个字典,每一个key都封装为一个xml节点的tag
+        如果封装的xml多个同级节点有相同tag，则以字典组成的列表方式封装
+        如果不希望将字典的key作为一个xml节点，key设置为NO_WRAP,不影响key对应的子集
+        
+        example1：
             'tds:capcabilities':{
                 'tt:device':{
                     'tt:xaddr': 'device_services',
@@ -54,19 +58,20 @@ def soap_encode(params, method, path):
                     'tt:WSSubscriptionPolicySupport': True,
                     'tt:WSPullPointSupport': False
                 },
-                'tt:Media':{
-                    'tt:XAddr': 'Media',
-                    'tt:RTPMulticast': True,
-                    'tt:RTP_RTSP_TCP':True
-                },
                 'respon':[
                     {'server': '123'},
                     {'server': '345'},
                     {'server': '789'}
-                ]
+                ],
+                
                 'tt:imaging': None
             }}
-
+        example2：
+            'NO_WRAP':[     # 没有NO_WRAP节点，只有三个server节点
+                {'server': '123'},
+                {'server': '345'},
+                {'server': '789'}
+            ],
         method:
             请求的方法名，如GetCapabilities
         path:
@@ -84,7 +89,10 @@ def soap_decode(data):
     解析客户端的请求消息的操作名称与参数
     '''
     soapenv = etree.fromstring(data)
-    method = soapenv[0][0]
+    if 'Header' in soapenv[0].tag:
+        method = soapenv[1][0]
+    else:
+        method = soapenv[0][0]
     method_name = _get_node_tag(method)
     if len(method)>0:
         params = _get_method_params(method)
@@ -142,15 +150,22 @@ def _wrap_soap_head():
 def _wrap_params(params):
     ''' 封装参数 '''
     body = ''
+
     for key in params:
         if isinstance(params[key], dict):
             sub_node = _wrap_params(params[key])
-            body = '''{0}<{1}>{2}</{1}>'''.format(body, key, sub_node)
+            if key == 'NO_WRAP':
+                body = '''{0}{1}'''.format(body, sub_node)
+            else:
+                body = '''{0}<{1}>{2}</{1}>'''.format(body, key, sub_node)
         elif isinstance(params[key], list):
             list_node = ''
             for item in params[key]:
                 list_node += _wrap_params(item)
-            body = '''{0}<{1}>{2}</{1}>'''.format(body, key, list_node)
+            if key == 'NO_WRAP':
+                body = '''{0}{1}'''.format(body, list_node)
+            else:
+                body = '''{0}<{1}>{2}</{1}>'''.format(body, key, list_node)
         else:
             if isinstance(params[key], bool):
                 params[key] = bool_map[params[key]]

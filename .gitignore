@@ -1,6 +1,11 @@
-*.pyc
-*.pcapng
-doc/
-.vscode/
+# python
+*.py[cod]
 test.py
 soap_client.py
+
+# doc
+doc/
+
+# vscode
+.vscode/
+*.code-workspace
