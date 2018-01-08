@@ -6,7 +6,6 @@
 # you may not use this file except in compliance with the License.
 #
 import random
-import sqlite3
 import datetime
 from onvifserver.server import OnvifServer, Fault, OnvifServerError
 from onvifserver import utils
@@ -30,9 +29,7 @@ class DeviceManagement(object):
             self.service_addr[server] = '{0}{1}'.format(root_path, utils.service_addr[server])
 
     def get_device_information(self, *args, **kwgs):
-        '''
-        GetDeviceInformation
-        '''
+        ''' GetDeviceInformation '''
         seeds = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
         serial_number = ''.join(random.sample(seeds, 12))
         device_info = wrap_param_with_ns('tds', device_information)
@@ -70,6 +67,12 @@ class DeviceManagement(object):
                         'tt:DeviceIO': deviceio_cap
                     }
                 }}
+        elif args[0]['Category'].lower() == 'media':
+            capabilities = {
+                'tds:Capabilities': {
+                    'tt:Media': media_cap,
+                }
+            }
         else:
             pass    # Todo: error process
         return capabilities
@@ -152,7 +155,7 @@ class DeviceManagement(object):
 
 class Media(object):
     ''' Media profile '''
-    def get_profiles(self):
+    def get_profiles(self, *args, **kwgs):
         ''' GetProfiles '''
         profile1 = wrap_param_with_ns('tt', media_profile1)
         profile2 = wrap_param_with_ns('tt', media_profile2)
@@ -161,6 +164,9 @@ class Media(object):
             {'trt:Profiles':profile2},
             ]
         return {'NO_WRAP': profile_list}
+
+    def get_stream_uri(self, *args, **kwgs):
+        return None
 
 
 class Events(object):
@@ -171,7 +177,8 @@ class Events(object):
 
 class OnvifIPC(object):
     '''
-    onvif摄像机类
+    onvif摄像机, 实现一个虚拟的onvif摄像机业务
+    OnvifIPC("192.168.1.9", 8000)
     '''
     def __init__(self, ip, port, ptz=False):
         '''
