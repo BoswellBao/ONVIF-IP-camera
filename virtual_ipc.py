@@ -123,7 +123,8 @@ class DeviceManagement(object):
             service = {}
             service['tds:Namespace'] = utils.namespace_map[server][1]
             service['tds:XAddr'] = self.service_addr[server]
-            service['tds:Capabilities'] = self._wrap_capability(utils.namespace_map[server][0], eval(server+'_capabilities'))
+            if include_cap:
+                service['tds:Capabilities'] = self._wrap_capability(utils.namespace_map[server][0], eval(server+'_capabilities'))
             service['tds:Version'] = wrap_param_with_ns('tt', utils.service_version)
             service_list.append({'tds:Service': service})
         return {'NO_WRAP': service_list}

@@ -36,6 +36,12 @@ ns_soap = {
     'xop': 'http://www.w3.org/2004/08/xop/include'
 }
 
+def map_reverse(scr_dict):
+    reverse_dict = {}
+    for key in scr_dict:
+        reverse_dict[scr_dict[key]] = key
+    return reverse_dict
+
 ############## service path ####################
 service_addr = {
     'device': '/onvif/device_service',
@@ -45,6 +51,7 @@ service_addr = {
     'imaging': '/onvif/Imaging',
     'deviceio': '/onvif/DeviceIo'
 }
+reversed_service_addr = map_reverse(service_addr)
 
 service_version = {
     'Major': 2,
@@ -68,6 +75,8 @@ bool_map = {
     True: 'true',
     False: 'false'
 }
+reversed_bool_map = map_reverse(bool_map)
+
 
 def soap_encode(params, method, path):
     '''
@@ -109,11 +118,11 @@ def soap_encode(params, method, path):
             请求路径
     '''
     response_method = '{0}Response'.format(method)
-    if path == '/onvif/device_service':
-        ns = 'tds'
-    elif path == '/onvif/Media':
-        ns = 'trt'
-    return _wrap_soap_message(ns, response_method, params)
+    if path in reversed_service_addr:
+        namespace = namespace_map[reversed_service_addr[path]]
+    else:
+        raise KeyError
+    return _wrap_soap_message(namespace, response_method, params)
 
 def soap_decode(data):
     '''
@@ -121,17 +130,30 @@ def soap_decode(data):
     '''
     soapenv = etree.fromstring(data)
     if 'Header' in soapenv[0].tag:
+        header_node = soapenv[0]
         method = soapenv[1][0]
     else:
+        header_node = None
         method = soapenv[0][0]
+    # phrase header
+    if header_node and len(header_node)>0:
+        header_params = _get_params(header_node)
+    else:
+        header_params = None
+
+    # phrase body
     method_name = _get_node_tag(method)
     if len(method)>0:
-        params = _get_method_params(method)
+        body_params = _get_params(method)
     else:
-        params = {}
+        body_params = {}
+    params = {
+        'HEADER': header_params,
+        'BODY': body_params
+    }
     return method_name, params
 
-def _get_method_params(parent_node):
+def _get_params(node):
     '''
     解析参数信息，将参数打包为一个列表返回。
     return value:
@@ -139,11 +161,11 @@ def _get_method_params(parent_node):
         [{'IncludeCapability': 'true'}]
     '''
     params_list = []
-    for param in parent_node:
+    for param in node:
         tmp_dict = {}
         param_name = _get_node_tag(param)
         if len(param) > 0:
-            sub_param = _get_method_params(param)   # recursively phrase sub node
+            sub_param = _get_params(param)   # recursively phrase sub node
             sub_param_name = _get_node_tag(param)
             tmp_dict[sub_param_name] = sub_param
         else:
@@ -165,7 +187,7 @@ def _wrap_soap_message(ns, response_method, params):
     header = _wrap_soap_head()
     param = _wrap_params(params)
     body = '''<{0}:{1}>{2}</{0}:{1}>'''.format(ns, response_method, param)
-    return '''{0}{1}</SOAP-ENV:Body></SOAP-ENV:Envelope>'''.format(header, body)
+    return '''{0}{1}</SOAP-ENV:Envelope>'''.format(header, body)
 
 
 def _wrap_soap_head():
@@ -175,12 +197,12 @@ def _wrap_soap_head():
     for ns in ns_soap:
         ns_string = ''' xmlns:{0}="{1}"'''.format(ns, ns_soap[ns])
         response_soap_header += ns_string
-    return '{0}><SOAP-ENV:Body>'.format(response_soap_header)
+    return '{0}>'.format(response_soap_header)
 
 
 def _wrap_params(params):
     ''' 封装参数 '''
-    body = ''
+    body = '<SOAP-ENV:Body>'
 
     for key in params:
         if isinstance(params[key], dict):
@@ -209,7 +231,7 @@ def _wrap_params(params):
                 body = '''{0}<{1}/>'''.format(body, key)
             else:
                 body = '''{0}<{1}>{2}</{1}>'''.format(body, key, params[key])
-    return body
+    return body+'</SOAP-ENV:Body>'
 
 def _wrap_attribute(key, attributes):
     node = key

@@ -6,11 +6,9 @@
 # you may not use this file except in compliance with the License.
 #
 import socketserver
-import sys
 from http.server import BaseHTTPRequestHandler
 import re
 import traceback
-import inspect
 from onvifserver.utils import soap_decode, soap_encode
 
 
@@ -21,7 +19,7 @@ class Error(Exception):
 
 
 class OnvifServerError(Error):
-    def __init__(self, faultString, **extra):
+    def __init__(self, faultString):
         self.faultString = faultString
 
     def __repr__(self):
@@ -66,7 +64,7 @@ class OnvifServerDispatcher(object):
         """
         self.instances[path] = instance
         self.server_path.append(path)
-        
+
     def register_function(self, function, name=None):
         """Registers a function to respond to onvif server.
         The optional name argument can be used to set a Unicode name
@@ -93,7 +91,6 @@ class OnvifServerDispatcher(object):
             # wrap response in a singleton tuple
             response = soap_encode(response, method, path)
         except Fault as fault:
-            pass
             print('an error happened in dispatch')  # just for debug
             # response = soap_error(fault, allow_none=self.allow_none,encoding=self.encoding)
         return response.encode(self.encoding, 'xmlcharrefreplace')
@@ -131,7 +128,7 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
 
     Handles all HTTP POST requests and attempts to decode them as
     onvif-client requests.
-    """        
+    """
     # Class attribute listing the accessible path components;
     # paths not on this list will result in a 404 error.
 
@@ -221,7 +218,7 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def report_404 (self):
-        # Report a 404 error
+        ''' Report a 404 error '''
         self.send_response(404)
         response = b'No such page'
         self.send_header("Content-type", "text/plain")
