@@ -33,7 +33,8 @@ ns_soap = {
     'wsa': 'http://www.w3.org/2005/08/addressing',
     'wstop': 'http://docs.oasis-open.org/wsn/t-1',
     'wsnt': 'http://docs.oasis-open.org/wsn/b-2',
-    'xop': 'http://www.w3.org/2004/08/xop/include'
+    'xop': 'http://www.w3.org/2004/08/xop/include',
+    'wsa5': 'http://www.w3.org/2005/08/addressing'
 }
 
 def map_reverse(scr_dict):
@@ -119,7 +120,7 @@ def soap_encode(params, method, path):
     '''
     response_method = '{0}Response'.format(method)
     if path in reversed_service_addr:
-        namespace = namespace_map[reversed_service_addr[path]]
+        namespace = namespace_map[reversed_service_addr[path]][0]
     else:
         raise KeyError
     return _wrap_soap_message(namespace, response_method, params)
@@ -136,7 +137,7 @@ def soap_decode(data):
         header_node = None
         method = soapenv[0][0]
     # phrase header
-    if header_node and len(header_node)>0:
+    if header_node is not None and len(header_node)>0:
         header_params = _get_params(header_node)
     else:
         header_params = None
@@ -160,9 +161,8 @@ def _get_params(node):
         [{'Category': 'All'}]
         [{'IncludeCapability': 'true'}]
     '''
-    params_list = []
+    tmp_dict = {}
     for param in node:
-        tmp_dict = {}
         param_name = _get_node_tag(param)
         if len(param) > 0:
             sub_param = _get_params(param)   # recursively phrase sub node
@@ -171,8 +171,7 @@ def _get_params(node):
         else:
             if param.text:
                 tmp_dict[param_name] = param.text
-        params_list.append(tmp_dict)
-    return params_list
+    return tmp_dict
 
 def _get_node_tag(node):
     '''
@@ -186,14 +185,13 @@ def _wrap_soap_message(ns, response_method, params):
     '''封装soap消息'''
     header = _wrap_soap_head()
     param = _wrap_params(params)
-    body = '''<{0}:{1}>{2}</{0}:{1}>'''.format(ns, response_method, param)
-    return '''{0}{1}</SOAP-ENV:Envelope>'''.format(header, body)
+    body = '''<soapenv:Body><{0}:{1}>{2}</{0}:{1}>'''.format(ns, response_method, param)
+    return '''{0}{1}</soapenv:Body></soapenv:Envelope>'''.format(header, body)
 
 
 def _wrap_soap_head():
     '''封装soap namespace'''
-    response_soap_header = r'''<?xml version="1.0" encoding="UTF-8"?>
-    <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"'''
+    response_soap_header = r'''<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope'''
     for ns in ns_soap:
         ns_string = ''' xmlns:{0}="{1}"'''.format(ns, ns_soap[ns])
         response_soap_header += ns_string
@@ -202,7 +200,7 @@ def _wrap_soap_head():
 
 def _wrap_params(params):
     ''' 封装参数 '''
-    body = '<SOAP-ENV:Body>'
+    body = ''
 
     for key in params:
         if isinstance(params[key], dict):
@@ -231,7 +229,7 @@ def _wrap_params(params):
                 body = '''{0}<{1}/>'''.format(body, key)
             else:
                 body = '''{0}<{1}>{2}</{1}>'''.format(body, key, params[key])
-    return body+'</SOAP-ENV:Body>'
+    return body
 
 def _wrap_attribute(key, attributes):
     node = key

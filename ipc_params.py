@@ -12,6 +12,8 @@ def wrap_param_with_ns(ns, params):
         raise ValueError()
     new = {}
     for key in params:
+        if key == 'ATTRI':
+            continue
         ns_key = '{0}:{1}'.format(ns, key)
         if isinstance(params[key], dict):
             new[ns_key] = wrap_param_with_ns(ns, params[key])

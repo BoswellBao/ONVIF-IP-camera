@@ -66,7 +66,8 @@ class OnvifServerDispatcher(object):
         self.server_path.append(path)
 
     def register_function(self, function, name=None):
-        """Registers a function to respond to onvif server.
+        """
+        Registers a function to respond to onvif server.
         The optional name argument can be used to set a Unicode name
         for the function.
         """
@@ -118,7 +119,7 @@ class OnvifServerDispatcher(object):
                     func = eval('instance.' + '_'.join(match).lower())
 
         if func is not None:
-            return func(*params)
+            return func(**params)
         else:
             raise Exception('method "%s" is not supported' % method)
 

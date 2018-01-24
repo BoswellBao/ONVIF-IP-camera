@@ -7,6 +7,7 @@
 #
 import random
 import datetime
+import re
 from onvifserver.server import OnvifServer, Fault, OnvifServerError
 from onvifserver import utils
 from ipc_params import *
@@ -29,7 +30,9 @@ class DeviceManagement(object):
             self.service_addr[server] = '{0}{1}'.format(root_path, utils.service_addr[server])
 
     def get_device_information(self, *args, **kwgs):
-        ''' GetDeviceInformation '''
+        ''' 
+        GetDeviceInformation 
+        '''
         seeds = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
         serial_number = ''.join(random.sample(seeds, 12))
         device_info = wrap_param_with_ns('tds', device_information)
@@ -37,8 +40,10 @@ class DeviceManagement(object):
         return device_info
 
     def get_capabilities(self, *args, **kwgs):
-        '''GetCapabilities'''
-        if 'Category' not in args[0]:
+        '''
+        GetCapabilities
+        '''
+        if 'Category' not in kwgs['BODY']:
             raise OnvifServerError('Category Not found')
 
         device_cap = wrap_param_with_ns('tt', device_capabilities)
@@ -56,7 +61,7 @@ class DeviceManagement(object):
         deviceio_cap = wrap_param_with_ns('tt', deviceio_capabilities)
         deviceio_cap['tt:XAddr'] = self.service_addr['deviceio']
 
-        if args[0]['Category'].lower() == 'all':
+        if kwgs['BODY']['Category'].lower() == 'all':
             capabilities = {
                 'tds:Capabilities': {
                     'tt:Device': device_cap,
@@ -67,7 +72,7 @@ class DeviceManagement(object):
                         'tt:DeviceIO': deviceio_cap
                     }
                 }}
-        elif args[0]['Category'].lower() == 'media':
+        elif kwgs['BODY']['Category'].lower() == 'media':
             capabilities = {
                 'tds:Capabilities': {
                     'tt:Media': media_cap,
@@ -78,7 +83,9 @@ class DeviceManagement(object):
         return capabilities
 
     def get_system_date_and_time(self, *args, **kwgs):
-        '''GetSystemDateAndTime'''
+        '''
+        GetSystemDateAndTime
+        '''
         now = datetime.datetime.now()
         utc_now = datetime.datetime.utcnow()
         time_setting['UTCDateTime'] = {
@@ -109,11 +116,13 @@ class DeviceManagement(object):
         return {'tds:SystemDateAndTime': data_time}
 
     def get_services(self, *args, **kwgs):
-        ''' GetServices '''
-        if 'IncludeCapability' not in args[0]:
+        '''
+        GetServices
+        '''
+        if 'IncludeCapability' not in kwgs['BODY']:
             raise OnvifServerError('IncludeCapability not found')
         else:
-            if args[0]['IncludeCapability'].lower() == 'true':
+            if kwgs['BODY']['IncludeCapability'].lower() == 'true':
                 include_cap = True
             else:
                 include_cap = False
@@ -130,7 +139,9 @@ class DeviceManagement(object):
         return {'NO_WRAP': service_list}
 
     def _wrap_capability(self, ns, capabilities, cap_name='Capabilities'):
-        '''将能力集封装为xml节点属性'''
+        '''
+        将能力集封装为xml节点属性
+        '''
         cap_with_attr = '{0}:{1}'.format(ns, cap_name)
         capability = {}
         has_sub_dict = False
@@ -155,9 +166,13 @@ class DeviceManagement(object):
 
 
 class Media(object):
-    ''' Media profile '''
+    '''
+    Media profile
+    '''
     def get_profiles(self, *args, **kwgs):
-        ''' GetProfiles '''
+        '''
+        GetProfiles
+        '''
         profile1 = wrap_param_with_ns('tt', media_profile1)
         profile2 = wrap_param_with_ns('tt', media_profile2)
         profile_list = [
@@ -167,13 +182,46 @@ class Media(object):
         return {'NO_WRAP': profile_list}
 
     def get_stream_uri(self, *args, **kwgs):
+        '''
+        GetStreamUri
+        '''
         return None
 
 
 class Events(object):
-    ''' 告警与事件订阅 '''
+    '''
+    告警与事件订阅
+    '''
+    def __init__(self, ip, port):
+        self.ip = ip
+        self.port = port
+        if self.port == 80:
+            root_path = "http://{}".format(self.ip)
+        else:
+            root_path = "http://{0}:{1}".format(self.ip, self.port)
+        self.event_notify_add = '{0}/onvif/event_notify'.format(root_path)
+
     def subscribe(self, *args, **kwgs):
-        pass
+        '''
+        告警订阅
+        '''
+        notify_address = kwgs['BODY']['ConsumerReference']['Address']
+        sub_time = kwgs['BODY']['InitialTerminationTime']
+        subscribe = re.findall(r"\d+\.?\d*", sub_time)[0]
+        if sub_time[-1].lower() == 's':
+            subscribe = int(subscribe)
+        elif sub_time[-1].lower() == 'm':
+            subscribe = int(subscribe) * 60
+        elif sub_time[-1].lower() == 'h':
+            subscribe = int(subscribe) * 3600
+
+        ret_dict = {}
+        ret_dict['wsnt:SubscriptionReference'] = {'wsa5:Address': self.event_notify_add}
+        start_time = datetime.datetime.now()
+        end_time = start_time + datetime.timedelta(seconds=subscribe)
+        ret_dict['wsnt:CurrentTime'] = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+        ret_dict['wsnt:TerminationTime'] = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+        return ret_dict
 
 
 class OnvifIPC(object):
@@ -188,7 +236,7 @@ class OnvifIPC(object):
         with OnvifServer((ip, port)) as self.server:
             self.server.register_instance(DeviceManagement(ip, port), utils.service_addr['device'])
             self.server.register_instance(Media(), utils.service_addr['media'])
-            self.server.register_instance(Events(), utils.service_addr['event'])
+            self.server.register_instance(Events(ip, port), utils.service_addr['event'])
             self.server.serve_forever()
 
 if __name__ == '__main__':
