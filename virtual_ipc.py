@@ -169,6 +169,10 @@ class Media(object):
     '''
     Media profile
     '''
+    def __init__(self, ip, port):
+        self.ip = ip
+        self.port = port
+
     def get_profiles(self, *args, **kwgs):
         '''
         GetProfiles
@@ -185,7 +189,20 @@ class Media(object):
         '''
         GetStreamUri
         '''
-        return None
+        stream_type = kwgs['BODY']['StreamSetup']['Stream']
+        protocol = kwgs['BODY']['StreamSetup']['Transport']['Protocol']
+        print(stream_type, protocol)
+        if stream_type != 'RTP-Unicast' or protocol != 'UDP':
+            raise OnvifServerError('Only RTP-unicast and udp is supported')
+        url = 'rtsp://{0}:554/media/video'.format(self.ip)
+        stream_url_info = {
+            'tt:Url': url,
+            'tt:InvalidAfterConnect': False,
+            'tt:InvalidAfterReboot': False,
+            'tt:Timeout': 'PT100S'
+        }
+
+        return {'trt:MediaUri': stream_url_info}
 
 
 class Events(object):
@@ -235,9 +252,9 @@ class OnvifIPC(object):
         '''
         with OnvifServer((ip, port)) as self.server:
             self.server.register_instance(DeviceManagement(ip, port), utils.service_addr['device'])
-            self.server.register_instance(Media(), utils.service_addr['media'])
+            self.server.register_instance(Media(ip, port), utils.service_addr['media'])
             self.server.register_instance(Events(ip, port), utils.service_addr['event'])
             self.server.serve_forever()
 
 if __name__ == '__main__':
-    OnvifIPC("192.168.1.9", 8000)
+    OnvifIPC("192.168.1.9", 8001)
