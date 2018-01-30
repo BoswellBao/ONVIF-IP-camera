@@ -9,7 +9,7 @@ import random
 import datetime
 import re
 import threading
-from onvifserver.server import OnvifServer, OnvifServerError
+from onvifserver.server import OnvifServer, OnvifServerFault
 from onvifserver import utils
 from ipc_params import *
 
@@ -30,9 +30,9 @@ class DeviceManagement(object):
         for server in utils.service_addr:
             self.service_addr[server] = '{0}{1}'.format(root_path, utils.service_addr[server])
 
-    def get_device_information(self, *args, **kwgs):
-        ''' 
-        GetDeviceInformation 
+    def get_device_information(self, **kwgs):
+        '''
+        GetDeviceInformation
         '''
         seeds = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
         serial_number = ''.join(random.sample(seeds, 12))
@@ -40,12 +40,12 @@ class DeviceManagement(object):
         device_info['tds:SerialNumber'] = serial_number
         return device_info
 
-    def get_capabilities(self, *args, **kwgs):
+    def get_capabilities(self, **kwgs):
         '''
         GetCapabilities
         '''
         if 'Category' not in kwgs['BODY']:
-            raise OnvifServerError('Category Not found')
+            raise OnvifServerFault('Sender', 'InvalidArgs','Invalid Args', 'missing argument')
 
         device_cap = wrap_param_with_ns('tt', device_capabilities)
         device_cap['tt:XAddr'] = self.service_addr['device']
@@ -83,7 +83,7 @@ class DeviceManagement(object):
             pass    # Todo: error process
         return capabilities
 
-    def get_system_date_and_time(self, *args, **kwgs):
+    def get_system_date_and_time(self, **kwgs):
         '''
         GetSystemDateAndTime
         '''
@@ -116,12 +116,12 @@ class DeviceManagement(object):
         data_time = wrap_param_with_ns('tt', time_setting)
         return {'tds:SystemDateAndTime': data_time}
 
-    def get_services(self, *args, **kwgs):
+    def get_services(self, **kwgs):
         '''
         GetServices
         '''
         if 'IncludeCapability' not in kwgs['BODY']:
-            raise OnvifServerError('IncludeCapability not found')
+            raise OnvifServerFault('Sender', 'InvalidArgs', 'Invalid Args', 'missing argument')
         else:
             if kwgs['BODY']['IncludeCapability'].lower() == 'true':
                 include_cap = True
@@ -162,8 +162,8 @@ class DeviceManagement(object):
         return {cap_with_attr: capability}
 
     # Todo
-    def get_service_capabilities(self, *args, **kwgs):
-        print(args, kwgs)
+    def get_service_capabilities(self, **kwgs):
+        print(kwgs)
         return {}
 
 
@@ -195,7 +195,9 @@ class Media(object):
         protocol = kwgs['BODY']['StreamSetup']['Transport']['Protocol']
         print(stream_type, protocol)
         if stream_type != 'RTP-Unicast' or protocol != 'UDP':
-            raise OnvifServerError('Only RTP-unicast and udp is supported')
+            raise OnvifServerFault(
+                'Receiver', 'ActionNotSupported',
+                'Optional ActionNot Implemented', 'Only RTP-unicast and UDP is supported')
         url = 'rtsp://{0}:554/media/video'.format(self.ip)
         stream_url_info = {
             'tt:Url': url,

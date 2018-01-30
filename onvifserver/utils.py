@@ -243,14 +243,14 @@ def soap_error(fault_code, subcode, fault_reason, description):
     ''' 封装soap错误信息 '''
     header = _wrap_soap_head()
     err_message = '''{0}<soapenv:Body><soapenv:Fault>'''.format(header)
-    if subcode is not None:
-        err_message += '''<soapenv:Code><soapenv:Value>{0}
+    if subcode is None:
+        err_message += '''<soapenv:Code><soapenv:Value>{0}\
                         </soapenv:Value></soapenv:Code>'''.format(fault_code)
     else:
         err_message += '''<soapenv:Code><soapenv:Value>{0}</soapenv:Value>
-                        <soapenv:Subcode><soapenv:Value>ter:{1}</soapenv:Value>
+                        <soapenv:Subcode><soapenv:Value>{1}</soapenv:Value>
                         </soapenv:Subcode></soapenv:Code>'''.format(fault_code, subcode)
-    err_message += '''<soapenv:Reason><soapenv:Text xml:lang="en">{0}
+    err_message += '''<soapenv:Reason><soapenv:Text xml:lang="en">{0}\
                     </soapenv:Text></soapenv:Reason>'''.format(fault_reason)
     err_message += '''<soapenv:Node>http://www.w3.org/2003/05/soapenvelope/node/ultimateReceiver</soapenv:Node>
         <soapenv:Role>http://www.w3.org/2003/05/soapenvelope/role/ultimateReceiver</soapenv:Role>'''

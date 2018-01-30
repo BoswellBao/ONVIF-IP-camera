@@ -7,7 +7,6 @@
 #
 import socketserver
 from http.server import BaseHTTPRequestHandler
-from ast import literal_eval
 import re
 import traceback
 from onvifserver.utils import soap_decode, soap_encode, soap_error
@@ -133,7 +132,13 @@ class OnvifServerDispatcher(object):
                 else:
                     pattern = r'[A-Z][a-z]+'
                     match = re.findall(pattern, method)
-                    func = literal_eval('instance.' + '_'.join(match).lower())
+                    try:
+                        func = eval('instance.' + '_'.join(match).lower())
+                    except AttributeError:
+                        raise OnvifServerFault(
+                            'Receiver', 'ActionNotSupported',
+                            'Optional ActionNot Implemented',
+                            'The requested action is not implemented by the device')
 
         if func is not None:
             return func(**params)
@@ -141,7 +146,7 @@ class OnvifServerDispatcher(object):
             raise OnvifServerFault(
                 'Receiver', 'ActionNotSupported',
                 'Optional ActionNot Implemented',
-                'The requested action is optional and is not implemented by the device')
+                'The requested action is not implemented by the device')
 
 
 class OnvifServerRequestHandler(BaseHTTPRequestHandler):
@@ -218,7 +223,7 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "application/soap+xml; charset=utf-8")
             self.send_header("Content-length", str(len(err_message)))
             self.end_headers()
-            self.wfile.write(err_message)
+            self.wfile.write(err_message.encode('utf-8', 'xmlcharrefreplace'))
 
         else:
             self.send_response(200)
