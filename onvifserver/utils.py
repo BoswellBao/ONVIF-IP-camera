@@ -239,3 +239,20 @@ def _wrap_attribute(key, attributes):
         node = '{0} {1}="{2}"'.format(node, attr, attributes[attr])
     return node
 
+def soap_error(fault_code, subcode, fault_reason, description):
+    ''' 封装soap错误信息 '''
+    header = _wrap_soap_head()
+    err_message = '''{0}<soapenv:Body><soapenv:Fault>'''.format(header)
+    if subcode is not None:
+        err_message += '''<soapenv:Code><soapenv:Value>{0}
+                        </soapenv:Value></soapenv:Code>'''.format(fault_code)
+    else:
+        err_message += '''<soapenv:Code><soapenv:Value>{0}</soapenv:Value>
+                        <soapenv:Subcode><soapenv:Value>ter:{1}</soapenv:Value>
+                        </soapenv:Subcode></soapenv:Code>'''.format(fault_code, subcode)
+    err_message += '''<soapenv:Reason><soapenv:Text xml:lang="en">{0}
+                    </soapenv:Text></soapenv:Reason>'''.format(fault_reason)
+    err_message += '''<soapenv:Node>http://www.w3.org/2003/05/soapenvelope/node/ultimateReceiver</soapenv:Node>
+        <soapenv:Role>http://www.w3.org/2003/05/soapenvelope/role/ultimateReceiver</soapenv:Role>'''
+    err_message += '''<soapenv:Detail><soapenv:Text>{0}</soapenv:Text></soapenv:Detail>'''.format(description)
+    return '''{0}</soapenv:Fault></soapenv:Body></soapenv:Envelope>'''.format(err_message)

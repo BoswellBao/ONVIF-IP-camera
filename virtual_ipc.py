@@ -8,7 +8,8 @@
 import random
 import datetime
 import re
-from onvifserver.server import OnvifServer, Fault, OnvifServerError
+import threading
+from onvifserver.server import OnvifServer, OnvifServerError
 from onvifserver import utils
 from ipc_params import *
 
@@ -160,6 +161,7 @@ class DeviceManagement(object):
                     capability.update(self._wrap_capability(ns, capabilities[cap], cap))
         return {cap_with_attr: capability}
 
+    # Todo
     def get_service_capabilities(self, *args, **kwgs):
         print(args, kwgs)
         return {}
@@ -173,7 +175,7 @@ class Media(object):
         self.ip = ip
         self.port = port
 
-    def get_profiles(self, *args, **kwgs):
+    def get_profiles(self, **kwgs):
         '''
         GetProfiles
         '''
@@ -185,7 +187,7 @@ class Media(object):
             ]
         return {'NO_WRAP': profile_list}
 
-    def get_stream_uri(self, *args, **kwgs):
+    def get_stream_uri(self, **kwgs):
         '''
         GetStreamUri
         '''
@@ -204,10 +206,20 @@ class Media(object):
 
         return {'trt:MediaUri': stream_url_info}
 
+    def get_video_encoder_configurations(self, **kwgs):
+        ''' GetVideoEncoderConfigurations '''
+        encoder1 = media_profile1['VideoEncoderConfiguration']
+        encoder2 = media_profile2['VideoEncoderConfiguration']
+        encoder_conf = [
+            {'trt:Configurations': encoder1},
+            {'trt:Configurations': encoder2}
+        ]
+        return {'NO_WRAP': encoder_conf}
+
 
 class Events(object):
     '''
-    告警与事件订阅
+    告警与事件订阅模块
     '''
     def __init__(self, ip, port):
         self.ip = ip
@@ -250,11 +262,11 @@ class OnvifIPC(object):
         '''
         a tuple of IP and port, eg: ("192.168.1.9", 8080)
         '''
-        with OnvifServer((ip, port)) as self.server:
-            self.server.register_instance(DeviceManagement(ip, port), utils.service_addr['device'])
-            self.server.register_instance(Media(ip, port), utils.service_addr['media'])
-            self.server.register_instance(Events(ip, port), utils.service_addr['event'])
-            self.server.serve_forever()
+        with OnvifServer((ip, port)) as server:
+            server.register_instance(DeviceManagement(ip, port), utils.service_addr['device'])
+            server.register_instance(Media(ip, port), utils.service_addr['media'])
+            server.register_instance(Events(ip, port), utils.service_addr['event'])
+            server.serve_forever()
 
 if __name__ == '__main__':
     OnvifIPC("192.168.1.9", 8001)

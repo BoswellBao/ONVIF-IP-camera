@@ -7,9 +7,10 @@
 #
 import socketserver
 from http.server import BaseHTTPRequestHandler
+from ast import literal_eval
 import re
 import traceback
-from onvifserver.utils import soap_decode, soap_encode
+from onvifserver.utils import soap_decode, soap_encode, soap_error
 
 
 class Error(Exception):
@@ -18,23 +19,30 @@ class Error(Exception):
         return repr(self)
 
 
-class OnvifServerError(Error):
-    def __init__(self, faultString):
-        self.faultString = faultString
+class OnvifServerFault(Error):
+    ''' onvif server soap error  '''
+    def __init__(self, fault_code, subcode, fault_reason, description):
+        super(OnvifServerFault, self).__init__()
+        self.fault_code = fault_code
+        self.subcode = subcode
+        self.fault_reason = fault_reason
+        self.description = description
 
     def __repr__(self):
-        return "<%s: %r>" % (self.__class__.__name__, self.faultString)
+        return "<%s: %s, %s, %s, %r>" % (self.__class__.__name__, self.fault_code,
+                self.subcode, self.fault_reason, self.description)
 
 
-class Fault(Error):
+class OnvifHTTPFault(Error):
     """onvif server fault."""
-    def __init__(self, faultCode, faultString, **extra):
+    def __init__(self, fault_code, fault_string):
         Error.__init__(self)
-        self.faultCode = faultCode
-        self.faultString = faultString
+        self.fault_code = fault_code
+        self.fault_string = fault_string
+
     def __repr__(self):
         return "<%s %s: %r>" % (self.__class__.__name__,
-                                self.faultCode, self.faultString)
+                                self.fault_code, self.fault_string)
 
 
 class OnvifServerDispatcher(object):
@@ -77,28 +85,36 @@ class OnvifServerDispatcher(object):
 
     def _marshaled_dispatch(self, data, dispatch_method = None, path = None):
         """
-        Todo
+        消息分发，将接收的消息传递给对应的处理函数
+        参数:
+            data: HTTP请求中的soap+xml数据
+            dispatch_method: 消息处理函数，默认为空，使用
+            path: post uri
+        返回值:
+            响应的soap+xml数据
         """
         if path not in self.server_path:
-            raise OnvifServerError('Unsupported server')
+            raise OnvifHTTPFault(400, 'Bad Request')
 
-        try:
-            method, params = soap_decode(data)
-            # generate response
-            if dispatch_method is not None:
-                response = dispatch_method(method, params, path)
-            else:
-                response = self._dispatch(method, params, path)
-            # wrap response in a singleton tuple
-            response = soap_encode(response, method, path)
-        except Fault as fault:
-            print('an error happened in dispatch')  # just for debug
-            # response = soap_error(fault, allow_none=self.allow_none,encoding=self.encoding)
+        method, params = soap_decode(data)
+        # generate response
+        if dispatch_method is not None:
+            response = dispatch_method(method, params, path)
+        else:
+            response = self._dispatch(method, params, path)
+        # wrap response in a singleton tuple
+        response = soap_encode(response, method, path)
         return response.encode(self.encoding, 'xmlcharrefreplace')
 
     def _dispatch(self, method, params, path):
         """
-        dsf
+        根据post请求的信息，调用相应应模块的处理方法
+        参数：
+            method: post请求方法
+            params: post请求中的参数列表
+            path: post uri
+        返回值:
+            对应的post请求响应数据，字典形式
         """
         func = None
         try:
@@ -108,7 +124,8 @@ class OnvifServerDispatcher(object):
             try:
                 instance = self.instances[path]
             except KeyError:
-                raise Exception('server "%s" is not supported' % path)
+                raise OnvifServerFault(
+                    'Sender', 'UnknownAction', 'Unknown Action', 'An unknown action is specified')
             else:
                 # whether a instance has a _dispatch
                 if hasattr(instance, '_dispatch'):
@@ -116,12 +133,15 @@ class OnvifServerDispatcher(object):
                 else:
                     pattern = r'[A-Z][a-z]+'
                     match = re.findall(pattern, method)
-                    func = eval('instance.' + '_'.join(match).lower())
+                    func = literal_eval('instance.' + '_'.join(match).lower())
 
         if func is not None:
             return func(**params)
         else:
-            raise Exception('method "%s" is not supported' % method)
+            raise OnvifServerFault(
+                'Receiver', 'ActionNotSupported',
+                'Optional ActionNot Implemented',
+                'The requested action is optional and is not implemented by the device')
 
 
 class OnvifServerRequestHandler(BaseHTTPRequestHandler):
@@ -180,21 +200,26 @@ class OnvifServerRequestHandler(BaseHTTPRequestHandler):
             response = self.server._marshaled_dispatch(
                     data, getattr(self, '_dispatch', None), self.path
                 )
-        except Exception as e: # This should only happen if the module is buggy
-            # internal error, report as HTTP server error
-            self.send_response(500)
-
+        except OnvifHTTPFault as err:    # internal error, report as HTTP server error
+            self.send_response(err.fault_code)
             # Send information about the exception if requested
             if hasattr(self.server, '_send_traceback_header') and \
                     self.server._send_traceback_header:
-                self.send_header("X-exception", str(e))
+                self.send_header("X-exception", str(err))
                 trace = traceback.format_exc()
                 trace = str(trace.encode('ASCII', 'backslashreplace'), 'ASCII')
                 self.send_header("X-traceback", trace)
-
             self.send_header("Content-length", "0")
-            print(e)
             self.end_headers()
+
+        except OnvifServerFault as err:     # internal error, report as soap server error
+            err_message = soap_error(err.fault_code, err.subcode, err.fault_reason, err.description)
+            self.send_response(500)
+            self.send_header("Content-type", "application/soap+xml; charset=utf-8")
+            self.send_header("Content-length", str(len(err_message)))
+            self.end_headers()
+            self.wfile.write(err_message)
+
         else:
             self.send_response(200)
             self.send_header("Connection", "close")
