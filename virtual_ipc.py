@@ -45,7 +45,7 @@ class DeviceManagement(object):
         GetCapabilities
         '''
         if 'Category' not in kwgs['BODY']:
-            raise OnvifServerFault('Sender', 'InvalidArgs','Invalid Args', 'missing argument')
+            raise OnvifServerFault('Sender', 'InvalidArgs', 'Invalid Args', 'missing argument')
 
         device_cap = wrap_param_with_ns('tt', device_capabilities)
         device_cap['tt:XAddr'] = self.service_addr['device']
@@ -232,7 +232,7 @@ class Events(object):
             root_path = "http://{0}:{1}".format(self.ip, self.port)
         self.event_notify_add = '{0}/onvif/event_notify'.format(root_path)
 
-    def subscribe(self, *args, **kwgs):
+    def subscribe(self, **kwgs):
         '''
         告警订阅
         '''
